@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Database &amp; Offline Lineage</title>
+  <style>
+    :root {
+      --ink: #17233b;
+      --ink-soft: #3f4c63;
+      --muted: #68758a;
+      --line: #dce3ec;
+      --paper: #f3f6f9;
+      --surface: #fff;
+      --green: #147a52;
+      --green-dark: #0b5538;
+      --green-soft: #e8f5ee;
+      --blue: #1769aa;
+      --blue-soft: #e9f3fc;
+      --coral: #c64d3c;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-size: 14px; line-height: 1.5; }
+    button, input, select { font: inherit; }
+    .masthead { background: #17233b; color: white; border-bottom: 4px solid #42a878; }
+    .masthead-inner { max-width: 1380px; margin: 0 auto; padding: 24px 28px 22px; }
+    .brand-line { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #247955; color: white; font-weight: 800; }
+    .eyebrow { color: #b2c9dc; text-transform: uppercase; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+    h1 { font: 800 23px/1.2 'Segoe UI', Tahoma, sans-serif; margin: 2px 0 0; }
+    .masthead p { color: #d0d9e5; margin: 12px 0 0 46px; max-width: 820px; font-size: 13px; }
+    main { max-width: 1380px; margin: 0 auto; padding: 22px 28px 54px; }
+    .section-band { margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .section-band h2 { margin: 0; font: 800 16px 'Segoe UI', Tahoma, sans-serif; }
+    .section-band p { margin: 0; color: var(--muted); font-size: 12px; }
+    .source-panel, .workspace-panel, .results-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 3px 12px rgba(23,35,59,.045); }
+    .source-panel { padding: 20px; }
+    .mode-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .mode-option { position: relative; }
+    .mode-option input, .engine-option input { position: absolute; opacity: 0; pointer-events: none; }
+    .mode-option label { min-width: 168px; display: flex; align-items: center; gap: 10px; padding: 11px 15px; border: 1px solid #cbd5e2; border-radius: 7px; color: var(--ink-soft); cursor: pointer; font-weight: 700; background: #fff; }
+    .radio-mark { width: 16px; height: 16px; flex: 0 0 16px; border: 2px solid #8290a3; border-radius: 50%; position: relative; }
+    .mode-option input:checked + label { border-color: var(--green); color: var(--green-dark); background: var(--green-soft); box-shadow: inset 0 0 0 1px var(--green); }
+    .mode-option input:checked + label .radio-mark { border-color: var(--green); }
+    .mode-option input:checked + label .radio-mark::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--green); }
+    .mode-option input:focus-visible + label, .engine-option input:focus-visible + label { outline: 3px solid rgba(23,105,170,.25); outline-offset: 2px; }
+    .mode-copy { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+    .mode-body { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 18px; }
+    [hidden] { display: none !important; }
+    .field-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 13px; }
+    .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .field label { color: var(--ink-soft); font-size: 12px; font-weight: 700; }
+    .field input, .field select, .toolbar input, .toolbar select { min-width: 0; height: 39px; padding: 8px 10px; border: 1px solid #cbd5e2; border-radius: 6px; color: var(--ink); background: #fff; }
+    input:focus, select:focus { outline: 3px solid rgba(23,105,170,.14); border-color: var(--blue); }
+    .help { color: var(--muted); font-size: 11px; margin: 4px 0 0; }
+    .engine-row { display: flex; gap: 8px; margin-bottom: 14px; }
+    .engine-option label { display: block; border: 1px solid #cbd5e2; border-radius: 6px; padding: 8px 13px; background: #fff; color: var(--ink-soft); cursor: pointer; font-weight: 700; }
+    .engine-option input:checked + label { border-color: var(--blue); background: var(--blue-soft); color: #104e7e; }
+    .security-note { border-left: 3px solid #42a878; background: #f1f8f4; color: #365b49; margin-top: 15px; padding: 9px 12px; font-size: 12px; }
+    .form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 15px; }
+    .button { min-height: 39px; padding: 9px 15px; border: 1px solid transparent; border-radius: 6px; font-weight: 700; cursor: pointer; }
+    .button:disabled { opacity: .48; cursor: not-allowed; }
+    .button-green { background: var(--green); color: white; }
+    .button-green:hover:not(:disabled) { background: var(--green-dark); }
+    .button-blue { background: var(--blue); color: white; }
+    .button-blue:hover:not(:disabled) { background: #105383; }
+    .button-quiet { background: #fff; border-color: #cbd5e2; color: var(--ink-soft); }
+    .button-quiet:hover:not(:disabled) { background: #f5f7fa; }
+    .file-input { display: block; width: 100%; max-width: 540px; min-height: 44px; padding: 8px; border: 1px dashed #9badc0; border-radius: 6px; background: #f8fafc; }
+    .selected-files { margin-top: 10px; max-height: 108px; overflow: auto; color: #174b2a; font-size: 12px; font-weight: 700; white-space: pre-line; overflow-wrap: anywhere; }
+    .status { min-height: 19px; color: var(--muted); font-size: 12px; }
+    .status.error { color: #a32f28; font-weight: 700; }
+    .status.success { color: #17663e; font-weight: 700; }
+    .workspace-panel { margin-top: 18px; padding: 18px 20px; }
+    .connection-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 14px; }
+    .connection-meta { color: var(--muted); font-size: 12px; }
+    .connection-meta strong { color: var(--ink); }
+    .catalog-toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-bottom: 13px; }
+    .toolbar-field { display: flex; flex-direction: column; gap: 4px; min-width: 190px; }
+    .toolbar-field label { font-size: 11px; color: var(--muted); font-weight: 700; }
+    .toolbar-field select[multiple] { height: 108px; max-width: 100%; min-width: 190px; }
+    .toolbar input { width: min(320px, 100%); }
+    .catalog-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .table-picker { border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+    .picker-head { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; background: #f6f8fa; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 12px; }
+    .picker-list { max-height: 430px; overflow: auto; }
+    .table-choice { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border-bottom: 1px solid #edf0f4; cursor: pointer; }
+    .table-choice:last-child { border-bottom: 0; }
+    .table-choice:hover { background: #f7faf8; }
+    .table-choice input { margin: 3px 0 0; accent-color: var(--green); }
+    .table-choice strong { display: block; color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+    .table-choice small { color: var(--muted); font-size: 10px; }
+    .graph-note { margin: 0 0 9px; color: var(--muted); font-size: 11px; }
+    .view-switch { display: flex; width: fit-content; gap: 3px; margin: 0 0 12px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #f6f8fa; }
+    .view-switch button { min-height: 34px; padding: 6px 11px; border: 0; border-radius: 4px; background: transparent; color: var(--ink-soft); font-weight: 700; cursor: pointer; }
+    .view-switch button[aria-pressed="true"] { background: #fff; color: var(--green-dark); box-shadow: 0 1px 3px rgba(23,35,59,.12); }
+    .view-switch button:focus-visible { outline: 3px solid rgba(23,105,170,.25); outline-offset: 2px; }
+    .graph-viewport { min-height: 260px; max-height: 650px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background-color: #fafcfd; background-image: radial-gradient(#dce4e8 .8px, transparent .8px); background-size: 18px 18px; }
+    .graph-stage { position: relative; min-width: 100%; min-height: 260px; }
+    .graph-stage svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+    .graph-link { stroke: #529477; stroke-width: 1.8; fill: none; }
+    .graph-link-label { fill: #46645a; font: 10px 'Segoe UI', Tahoma, sans-serif; }
+    .graph-node { position: absolute; width: 248px; border: 1px solid #80ad95; border-radius: 7px; background: white; box-shadow: 0 2px 7px rgba(23,35,59,.07); overflow: hidden; }
+    .graph-node.target { border-color: #7ea5c5; }
+    .graph-node-head { background: #e8f5ee; border-bottom: 1px solid #d2e7d9; padding: 8px 10px; font-weight: 700; font-size: 12px; overflow-wrap: anywhere; }
+    .graph-node.target .graph-node-head { background: #eaf3fb; border-bottom-color: #d7e6f3; }
+    .graph-node-body { padding: 7px 10px; color: #4d5b6e; font-size: 10px; }
+    .graph-node-body div { padding: 2px 0; overflow-wrap: anywhere; }
+    .graph-node-body .more-columns { color: var(--muted); font-style: italic; }
+    .empty-state { padding: 26px 16px; color: var(--muted); text-align: center; font-size: 12px; }
+    .results-panel { margin-top: 18px; padding: 18px 20px; }
+    .result-summary { display: flex; gap: 9px; flex-wrap: wrap; margin: 10px 0 14px; }
+    .metric { min-width: 110px; padding: 8px 10px; background: #f3f7f5; border: 1px solid #dce9e1; border-radius: 6px; }
+    .metric strong { display: block; font-size: 16px; color: var(--green-dark); }
+    .metric span { color: var(--muted); font-size: 10px; }
+    .candidate-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfd; }
+    .candidate-panel h3 { margin: 0 0 5px; font-size: 14px; }
+    .candidate-panel .help { margin: 0 0 12px; max-width: 1100px; }
+    .table-wrap { overflow: auto; max-height: 360px; border: 1px solid var(--line); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th, td { padding: 8px 9px; border-bottom: 1px solid #e9edf2; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; z-index: 1; background: #eef3f7; color: #43546b; font-size: 10px; text-transform: uppercase; }
+    td { overflow-wrap: anywhere; }
+    .fine-print { margin-top: 14px; color: var(--muted); font-size: 10px; }
+    @media (max-width: 900px) {
+      .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .catalog-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .masthead-inner { padding: 20px 16px; }
+      .masthead p { margin-left: 0; }
+      main { padding: 16px 12px 38px; }
+      .source-panel, .workspace-panel, .results-panel { padding: 14px; }
+      .field-grid { grid-template-columns: 1fr; }
+      .mode-option, .mode-option label { width: 100%; }
+      .toolbar-field { width: 100%; }
+      .toolbar-field select, .toolbar-field input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand-line"><div class="brand-mark" aria-hidden="true">L</div><div><div class="eyebrow">Data lineage workspace</div><h1>Database &amp; Offline Lineage</h1></div></div>
+      <p>Analyze SQL files without a database, or connect locally to browse read-only database structure and foreign-key relationships.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="section-band"><h2>Choose a source</h2><p>One mode at a time</p></div>
+    <section class="source-panel" aria-label="Source mode">
+      <fieldset style="border:0;padding:0;margin:0">
+        <legend class="eyebrow" style="color:var(--muted);margin-bottom:8px">Source mode</legend>
+        <div class="mode-row">
+          <div class="mode-option"><input type="radio" name="mode" id="mode-offline" value="offline" checked><label for="mode-offline"><span class="radio-mark"></span><span>Offline files<span class="mode-copy">SQL Server, Oracle or Snowflake scripts</span></span></label></div>
+          <div class="mode-option"><input type="radio" name="mode" id="mode-live" value="live"><label for="mode-live"><span class="radio-mark"></span><span>Live connection<span class="mode-copy">Read-only catalog access</span></span></label></div>
+        </div>
+      </fieldset>
+
+      <div id="offline-mode" class="mode-body">
+        <div class="field-grid">
+          <div class="field"><label for="offline-dialect">SQL dialect</label><select id="offline-dialect"><option value="sqlserver">SQL Server</option><option value="oracle">Oracle</option><option value="snowflake">Snowflake</option></select></div>
+          <div class="field" style="grid-column:span 3"><label for="offline-files">SQL files</label><input class="file-input" id="offline-files" type="file" accept=".sql,.txt" multiple><span class="help">Files are sent only to this local service for parsing; no database connection is made.</span></div>
+        </div>
+        <div id="offline-file-names" class="selected-files" aria-live="polite"></div>
+        <div class="form-actions"><button class="button button-green" id="analyze-offline" type="button">Analyze offline files</button><div id="offline-status" class="status" role="status" aria-live="polite"></div></div>
+      </div>
+
+      <div id="live-mode" class="mode-body" hidden>
+        <fieldset style="border:0;padding:0;margin:0">
+          <legend class="eyebrow" style="color:var(--muted);margin-bottom:7px">Database engine</legend>
+          <div class="engine-row">
+            <div class="engine-option"><input type="radio" name="engine" id="engine-sqlserver" value="sqlserver" checked><label for="engine-sqlserver">SQL Server</label></div>
+            <div class="engine-option"><input type="radio" name="engine" id="engine-oracle" value="oracle"><label for="engine-oracle">Oracle</label></div>
+            <div class="engine-option"><input type="radio" name="engine" id="engine-snowflake" value="snowflake"><label for="engine-snowflake">Snowflake</label></div>
+          </div>
+        </fieldset>
+        <form id="connection-form" autocomplete="off">
+          <div class="field-grid">
+            <div class="field network-field"><label for="db-host">Host / server</label><input id="db-host" name="host" required placeholder="localhost or db.company.net" autocomplete="off"></div>
+            <div class="field network-field"><label for="db-port">Port</label><input id="db-port" name="port" type="number" min="1" max="65535" value="1433" required></div>
+            <div class="field"><label for="db-username">Username</label><input id="db-username" name="username" required autocomplete="off"></div>
+            <div class="field"><label for="db-password">Password</label><input id="db-password" name="password" type="password" required autocomplete="new-password"></div>
+            <div class="field sqlserver-field"><label for="initial-database">Initial database <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="initial-database" placeholder="master"></div>
+            <div class="field oracle-field" hidden><label for="oracle-service">Oracle service name</label><input id="oracle-service" placeholder="ORCLPDB1"></div>
+            <div class="field sqlserver-field"><label for="odbc-driver">ODBC driver</label><select id="odbc-driver"><option>ODBC Driver 18 for SQL Server</option><option>ODBC Driver 17 for SQL Server</option></select></div>
+            <div class="field sqlserver-field" style="justify-content:end"><label style="display:flex;gap:8px;align-items:center"><input id="trust-cert" type="checkbox"> Trust server certificate</label><span class="help">Use only for a trusted development server.</span></div>
+            <div class="field snowflake-field" hidden><label for="snowflake-account">Account identifier</label><input id="snowflake-account" placeholder="org-account or account locator" autocomplete="off"></div>
+            <div class="field snowflake-field" hidden><label for="snowflake-warehouse">Warehouse</label><input id="snowflake-warehouse" placeholder="ANALYTICS_WH" autocomplete="off"></div>
+            <div class="field snowflake-field" hidden><label for="snowflake-database">Initial database <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="snowflake-database" placeholder="ANALYTICS" autocomplete="off"></div>
+            <div class="field snowflake-field" hidden><label for="snowflake-role">Role <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input id="snowflake-role" placeholder="READ_ONLY_ANALYST" autocomplete="off"></div>
+          </div>
+          <div class="security-note">Credentials stay in this page's memory and are sent only to the local service. Catalog queries read database metadata; they do not read table rows or execute changes. Snowflake key constraints may be informational. Disconnect clears the form.</div>
+          <div class="form-actions"><button class="button button-blue" id="connect-button" type="submit">Connect &amp; list databases</button><button class="button button-quiet" id="disconnect-button" type="button" disabled>Disconnect</button><div id="live-status" class="status" role="status" aria-live="polite"></div></div>
+        </form>
+        <div id="catalog-panel" hidden>
+          <div class="connection-strip"><div class="connection-meta" id="connection-label"></div><button class="button button-quiet" id="refresh-catalog" type="button">Refresh catalog</button></div>
+          <div class="catalog-toolbar">
+            <div class="toolbar-field"><label id="database-select-label" for="database-select">Databases / service</label><select id="database-select" multiple size="4" aria-label="Databases / service"></select></div>
+            <div class="toolbar-field"><label for="schema-select">Schemas</label><select id="schema-select" multiple size="4"><option value="" selected>All schemas</option></select></div>
+            <div class="toolbar-field" style="flex:1"><label for="table-search">Find a table</label><input id="table-search" type="search" placeholder="Filter by schema or table name"></div>
+          </div>
+          <div class="catalog-layout">
+            <section class="table-picker" aria-label="Database tables">
+              <div class="picker-head"><span id="table-count">Tables</span><div><button class="button button-quiet" id="select-visible" type="button">Select visible</button><button class="button button-quiet" id="clear-selection" type="button">Clear</button></div></div>
+              <div class="picker-list" id="table-list"><div class="empty-state">Connect to load tables.</div></div>
+              <div style="padding:10px;border-top:1px solid var(--line)">
+                <button class="button button-green" id="generate-live" type="button" disabled>Generate lineage from selected tables</button>
+                <div id="snowflake-history-controls" hidden style="margin-top:12px">
+                  <div class="field"><label for="history-hours">History window (hours)</label><input id="history-hours" type="number" min="1" max="168" step="1" value="168" required></div>
+                  <button class="button button-blue" id="generate-history-lineage" type="button" disabled style="margin-top:8px">Analyze query-history lineage</button>
+                </div>
+              </div>
+            </section>
+            <section aria-label="Live catalog lineage">
+              <p class="graph-note">Live mode visualizes declared relationship metadata, not transformation lineage. Snowflake standard-table key constraints may be informational and are not necessarily enforced.</p>
+              <div class="graph-viewport" id="live-graph"><div class="empty-state">Select tables, then generate a relationship map.</div></div>
+            </section>
+          </div>
+          <section id="snowflake-candidate-panel" class="candidate-panel" hidden aria-labelledby="candidate-mapping-heading">
+            <h3 id="candidate-mapping-heading">Candidate source-to-target mappings</h3>
+            <p class="help">Candidates use exact column-name matches or a declared Snowflake key between the selected tables. They show structural clues only—not transformations, data movement, or verified lineage. Review each candidate before using it.</p>
+            <div class="catalog-toolbar">
+              <div class="toolbar-field"><label for="candidate-source-table">Source table</label><select id="candidate-source-table"><option value="">Choose source table</option></select></div>
+              <div class="toolbar-field"><label for="candidate-target-table">Target table</label><select id="candidate-target-table"><option value="">Choose target table</option></select></div>
+              <button class="button button-blue" id="generate-candidate-mapping" type="button" disabled>Find candidate mappings</button>
+            </div>
+            <div id="candidate-mapping-results" aria-live="polite"><p class="empty-state">Choose a source and target table to review structural candidates.</p></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="results-panel" class="results-panel" hidden aria-live="polite">
+      <div class="section-band"><h2 id="results-title">Lineage results</h2><p id="results-subtitle"></p></div>
+      <div id="result-metrics" class="result-summary"></div>
+      <div id="lineage-view-controls" class="view-switch" role="group" aria-label="Offline lineage view" hidden>
+        <button id="table-lineage-view" type="button" aria-pressed="true">Table lineage</button>
+        <button id="file-dependency-view" type="button" aria-pressed="false">SQL dependencies</button>
+      </div>
+      <p id="relationship-note" class="graph-note"></p>
+      <div id="offline-graph" class="graph-viewport"><div class="empty-state">No lineage generated.</div></div>
+      <div id="file-graph" class="graph-viewport" hidden></div>
+      <div id="mapping-results" style="margin-top:16px"></div>
+      <details id="analysis-details" hidden style="margin-top:12px"><summary>Query analysis status and limitations</summary><pre id="analysis-details-text" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+      <div id="file-dependency-results" style="margin-top:16px" hidden></div>
+    </section>
+    <p class="fine-print">Live catalog access requires local database drivers and read-only metadata permissions. No credentials are written to disk.</p>
+  </main>
+
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    let activeConnection = null;
+    let liveCatalog = null;
+    let catalogRevision = 0;
+    let selectedTableIds = new Set();
+    let historyLoading = false;
+    let offlineFileList = [];
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+    }
+
+    function formatApiError(detail, status, payload) {
+      if (Array.isArray(detail)) {
+        const unsupportedSnowflake = payload?.engine === "snowflake" && detail.some((issue) =>
+          issue?.type === "literal_error" && (issue.loc || []).includes("engine")
+        );
+        if (unsupportedSnowflake) {
+          return "This running DBConnect service does not yet support Snowflake. Restart the local DBConnect service after installing the updated requirements, then retry.";
+        }
+        return detail.map((issue) => {
+          const location = (issue?.loc || []).filter((part) => part !== "body").join(".");
+          return `${location ? location + ": " : ""}${issue?.msg || "Invalid value"}`;
+        }).join("; ") || `Request failed (${status}).`;
+      }
+      if (typeof detail === "string" && detail.trim()) return detail;
+      if (detail && typeof detail === "object") return JSON.stringify(detail);
+      return `Request failed (${status}).`;
+    }
+
+    async function api(path, payload) {
+      if (window.location.protocol === "file:") {
+        throw new Error("Open DBConnect at http://127.0.0.1:8765/ through its local service. Do not open index.html directly as a file.");
+      }
+      let response;
+      try {
+        response = await fetch(path, {
+          method: payload ? "POST" : "GET",
+          headers: payload ? { "Content-Type": "application/json" } : {},
+          body: payload ? JSON.stringify(payload) : undefined,
+        });
+      } catch {
+        throw new Error("Cannot reach the local DBConnect service. Start or restart DBConnect_Offline/server.py, then open http://127.0.0.1:8765/. Do not open index.html directly as a file.");
+      }
+      const body = await response.text();
+      let data;
+      try {
+        data = body ? JSON.parse(body) : {};
+      } catch {
+        const detail = body.trim().slice(0, 240);
+        if (!response.ok) throw new Error(`Request failed (${response.status})${detail ? `: ${detail}` : "."}`);
+        throw new Error(`Service returned an invalid response (${response.status}).`);
+      }
+      if (!response.ok) throw new Error(formatApiError(data.detail, response.status, payload));
+      return data;
+    }
+
+    function setStatus(element, message, kind = "") {
+      element.textContent = message;
+      element.className = `status ${kind}`.trim();
+    }
+
+    function currentEngine() {
+      return $("input[name='engine']:checked").value;
+    }
+
+    function updateEngineFields() {
+      const engine = currentEngine();
+      const sqlServer = engine === "sqlserver";
+      const oracle = engine === "oracle";
+      const snowflake = engine === "snowflake";
+      document.querySelectorAll(".sqlserver-field").forEach((field) => { field.hidden = !sqlServer; });
+      document.querySelectorAll(".oracle-field").forEach((field) => { field.hidden = !oracle; });
+      document.querySelectorAll(".snowflake-field").forEach((field) => { field.hidden = !snowflake; });
+      document.querySelectorAll(".network-field").forEach((field) => { field.hidden = snowflake; });
+      $("#db-port").value = sqlServer ? "1433" : "1521";
+      $("#db-port").required = !snowflake;
+      $("#db-host").required = !snowflake;
+      $("#oracle-service").required = oracle;
+      $("#snowflake-account").required = snowflake;
+      $("#snowflake-warehouse").required = snowflake;
+      $("#database-select-label").textContent = oracle ? "Service" : "Databases";
+    }
+
+    function updateMode() {
+      const live = $("#mode-live").checked;
+      $("#offline-mode").hidden = live;
+      $("#live-mode").hidden = !live;
+      if (!live) disconnect();
+      $("#results-panel").hidden = true;
+      setStatus($("#offline-status"), "");
+      setStatus($("#live-status"), "");
+    }
+
+    function connectionPayload(databaseOverride) {
+      const engine = currentEngine();
+      return {
+        engine,
+        host: engine === "snowflake" ? null : $("#db-host").value.trim(),
+        port: engine === "snowflake" ? null : Number($("#db-port").value),
+        username: $("#db-username").value.trim(),
+        password: $("#db-password").value,
+        database: engine === "sqlserver"
+          ? ((databaseOverride ?? $("#initial-database").value.trim()) || null)
+          : engine === "snowflake" ? ((databaseOverride ?? $("#snowflake-database").value.trim()) || null) : null,
+        service_name: engine === "oracle" ? $("#oracle-service").value.trim() : null,
+        account: engine === "snowflake" ? $("#snowflake-account").value.trim() : null,
+        warehouse: engine === "snowflake" ? $("#snowflake-warehouse").value.trim() : null,
+        role: engine === "snowflake" ? ($("#snowflake-role").value.trim() || null) : null,
+        driver: $("#odbc-driver").value,
+        trust_server_certificate: $("#trust-cert").checked,
+      };
+    }
+
+    function renderTableChoices() {
+      if (!liveCatalog) return;
+      const schemas = new Set([...$("#schema-select").selectedOptions].map((option) => option.value).filter(Boolean));
+      const filter = $("#table-search").value.trim().toLowerCase();
+      const visible = liveCatalog.tables.filter((table) =>
+        (!schemas.size || schemas.has(table.schema)) && (!filter || table.id.toLowerCase().includes(filter))
+      );
+      $("#table-count").textContent = `${visible.length} of ${liveCatalog.tables.length} tables`;
+      $("#table-list").innerHTML = visible.length ? visible.map((table) => `
+        <label class="table-choice"><input type="checkbox" value="${escapeHtml(table.id)}" ${selectedTableIds.has(table.id) ? "checked" : ""}>
+          <span><strong>${escapeHtml(table.id)}</strong><small>${escapeHtml(table.object_type || "table")} · ${table.columns.length} columns</small></span>
+        </label>`).join("") : '<div class="empty-state">No tables match this filter.</div>';
+      updateLiveButtons();
+    }
+
+    function updateLiveButtons() {
+      const selected = Boolean(liveCatalog) && Boolean(document.querySelector("#table-list input:checked"));
+      $("#generate-live").disabled = !selected;
+      $("#snowflake-history-controls").hidden = activeConnection?.engine !== "snowflake";
+      $("#generate-history-lineage").disabled = !selected || historyLoading;
+    }
+
+    function buildSnowflakeCandidateMappings(catalog, sourceId, targetId) {
+      if (!catalog || !sourceId || !targetId || sourceId === targetId) return [];
+      const source = catalog.tables.find((table) => table.id === sourceId);
+      const target = catalog.tables.find((table) => table.id === targetId);
+      if (!source || !target) return [];
+      const candidates = new Map();
+      function add(sourceColumn, targetColumn, evidence) {
+        const key = `${String(sourceColumn).toUpperCase()}::${String(targetColumn).toUpperCase()}`;
+        const item = candidates.get(key) || {
+          source_table: source.id, source_column: sourceColumn, source_type: source.columns.find((column) => column.name === sourceColumn)?.type || "Unknown",
+          target_table: target.id, target_column: targetColumn, target_type: target.columns.find((column) => column.name === targetColumn)?.type || "Unknown",
+          evidence: new Set(),
+        };
+        item.evidence.add(evidence);
+        candidates.set(key, item);
+      }
+      const targetColumns = new Map(target.columns.map((column) => [column.name.toUpperCase(), column.name]));
+      source.columns.forEach((column) => {
+        const targetColumn = targetColumns.get(column.name.toUpperCase());
+        if (targetColumn) add(column.name, targetColumn, "Exact column-name match; candidate only");
+      });
+      (catalog.relationships || []).forEach((relationship) => {
+        if (relationship.source === source.id && relationship.target === target.id) {
+          add(relationship.source_column, relationship.target_column,
+            `Declared key metadata${relationship.constraint ? `: ${relationship.constraint}` : ""}; enforcement not verified`);
+        }
+      });
+      return [...candidates.values()].map((candidate) => ({ ...candidate, evidence: [...candidate.evidence] }));
+    }
+
+    function populateSnowflakeCandidateTables() {
+      const enabled = activeConnection?.engine === "snowflake" && Boolean(liveCatalog);
+      $("#snowflake-candidate-panel").hidden = !enabled;
+      const sourceSelect = $("#candidate-source-table"), targetSelect = $("#candidate-target-table");
+      if (!enabled) return;
+      [sourceSelect, targetSelect].forEach((select) => {
+        const current = select.value;
+        select.innerHTML = '<option value="">Choose a table</option>' + liveCatalog.tables
+          .map((table) => `<option value="${escapeHtml(table.id)}">${escapeHtml(table.id)}</option>`).join("");
+        if (liveCatalog.tables.some((table) => table.id === current)) select.value = current;
+      });
+      updateSnowflakeCandidateButton();
+    }
+
+    function updateSnowflakeCandidateButton() {
+      const sourceId = $("#candidate-source-table").value, targetId = $("#candidate-target-table").value;
+      const button = $("#generate-candidate-mapping");
+      button.disabled = !sourceId || !targetId || sourceId === targetId;
+      const output = $("#candidate-mapping-results");
+      if (button.disabled) {
+        output.innerHTML = '<p class="empty-state">Choose two different tables to review structural candidates.</p>';
+        return;
+      }
+      output.innerHTML = '<p class="empty-state">Select “Find candidate mappings” to compare these tables.</p>';
+    }
+
+    function renderSnowflakeCandidateMappings() {
+      const sourceId = $("#candidate-source-table").value, targetId = $("#candidate-target-table").value;
+      if (!sourceId || !targetId || sourceId === targetId) return;
+      const output = $("#candidate-mapping-results");
+      const candidates = buildSnowflakeCandidateMappings(liveCatalog, sourceId, targetId);
+      output.innerHTML = candidates.length
+        ? `<div class="table-wrap"><table><thead><tr><th>Source table</th><th>Source column</th><th>Source type</th><th>Target table</th><th>Target column</th><th>Target type</th><th>Candidate evidence</th></tr></thead><tbody>${candidates.map((item) => `<tr><td>${escapeHtml(item.source_table)}</td><td>${escapeHtml(item.source_column)}</td><td>${escapeHtml(item.source_type)}</td><td>${escapeHtml(item.target_table)}</td><td>${escapeHtml(item.target_column)}</td><td>${escapeHtml(item.target_type)}</td><td>${item.evidence.map(escapeHtml).join("<br>")}</td></tr>`).join("")}</tbody></table></div>`
+        : '<p class="empty-state">No exact-name or visible declared-key candidates were found for this table pair. This does not prove that no transformation mapping exists; inspect the SQL or ETL definition.</p>';
+    }
+
+    function renderGraph(container, tables, relationships, emptyMessage = "No tables to display.") {
+      if (!tables.length) {
+        container.innerHTML = `<div class="empty-state">${escapeHtml(emptyMessage)}</div>`;
+        return;
+      }
+      const ids = new Set(tables.map((table) => table.id));
+      const links = relationships.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
+      const depth = Object.fromEntries(tables.map((table) => [table.id, 0]));
+      for (let iteration = 0; iteration < tables.length; iteration++) {
+        let changed = false;
+        links.forEach((edge) => {
+          if (depth[edge.source] < tables.length - 1 && depth[edge.target] < depth[edge.source] + 1) {
+            depth[edge.target] = depth[edge.source] + 1;
+            changed = true;
+          }
+        });
+        if (!changed) break;
+      }
+      const byDepth = new Map();
+      tables.forEach((table) => {
+        const level = depth[table.id] || 0;
+        if (!byDepth.has(level)) byDepth.set(level, []);
+        byDepth.get(level).push(table);
+      });
+      const positions = {};
+      const xGap = 360, yGap = 168, pad = 26, nodeWidth = 248;
+      let maxRows = 1;
+      [...byDepth.keys()].sort((a, b) => a - b).forEach((level) => {
+        const levelTables = byDepth.get(level);
+        maxRows = Math.max(maxRows, levelTables.length);
+        levelTables.forEach((table, index) => {
+          positions[table.id] = { x: pad + level * xGap, y: pad + index * yGap };
+        });
+      });
+      const width = Math.max(container.clientWidth - 2, pad * 2 + (Math.max(...byDepth.keys()) + 1) * xGap);
+      const height = Math.max(260, pad * 2 + maxRows * yGap);
+      const edgeSvg = links.map((edge) => {
+        const from = positions[edge.source], to = positions[edge.target];
+        const x1 = from.x + nodeWidth, y1 = from.y + 48;
+        const x2 = to.x, y2 = to.y + 48;
+        const middle = (x1 + x2) / 2;
+        return `<path class="graph-link" marker-end="url(#arrow)" d="M ${x1} ${y1} C ${middle} ${y1}, ${middle} ${y2}, ${x2} ${y2}"></path>
+          <text class="graph-link-label" x="${middle}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle">${escapeHtml(edge.label || edge.source_column || edge.constraint || (edge.kind === "sql_mapping" ? "SQL write" : "references"))}</text>`;
+      }).join("");
+      const nodes = tables.map((table) => {
+        const position = positions[table.id];
+        const isTarget = links.some((edge) => edge.target === table.id);
+        const columns = (table.columns || []).slice(0, 5).map((column) =>
+          `<div>${escapeHtml(column.name)} <span style="color:#8793a3">${escapeHtml(column.type || "")}</span></div>`).join("");
+        const more = table.columns.length > 5 ? `<div class="more-columns">+ ${table.columns.length - 5} more columns</div>` : "";
+        return `<article class="graph-node${isTarget ? " target" : ""}" style="left:${position.x}px;top:${position.y}px">
+          <div class="graph-node-head">${escapeHtml(table.id)}</div><div class="graph-node-body">${columns}${more}</div></article>`;
+      }).join("");
+      container.innerHTML = `<div class="graph-stage" style="width:${width}px;height:${height}px">
+        <svg width="${width}" height="${height}" aria-hidden="true"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8z" fill="#529477"></path></marker></defs>${edgeSvg}</svg>${nodes}
+      </div>`;
+    }
+
+    function renderMappings(result, identifierLabel = "File") {
+      const mappings = result.mappings || [];
+      $("#mapping-results").innerHTML = mappings.length ? `
+        <h3 style="font:700 14px 'Segoe UI',Tahoma,sans-serif">Column mappings</h3>
+        <div class="table-wrap"><table><thead><tr><th>${escapeHtml(identifierLabel)}</th><th>Source</th><th>Source column</th><th>Target</th><th>Target column</th><th>Expression</th></tr></thead>
+          <tbody>${mappings.map((row) => `<tr><td>${escapeHtml(row.file)}</td><td>${escapeHtml(row.source_table)}</td><td>${escapeHtml(row.source_column)}</td><td>${escapeHtml(row.target_table)}</td><td>${escapeHtml(row.target_column)}</td><td>${escapeHtml(row.transformation)}</td></tr>`).join("")}</tbody>
+        </table></div>` : "";
+    }
+
+    function setOfflineLineageView(view) {
+      const dependenciesView = view === "files";
+      $("#table-lineage-view").setAttribute("aria-pressed", String(!dependenciesView));
+      $("#file-dependency-view").setAttribute("aria-pressed", String(dependenciesView));
+      $("#offline-graph").hidden = dependenciesView;
+      $("#file-graph").hidden = !dependenciesView;
+      $("#mapping-results").hidden = dependenciesView;
+      $("#file-dependency-results").hidden = !dependenciesView;
+      $("#relationship-note").textContent = dependenciesView
+        ? "Edges show shared tables and matching column names. Renamed columns are not inferred, and dependencies do not establish execution order."
+        : "Offline SQL mappings are derived from parsed statements. Review each expression and warning before treating it as verified lineage.";
+    }
+
+    function dependencyGraphLabel(edge) {
+      const columns = edge.via_columns || [];
+      const attributes = columns.slice(0, 2).map((column) => `${column.writer_column} -> ${column.reader_column}`);
+      if (!attributes.length) attributes.push("no matching column names");
+      if (columns.length > 2) attributes.push(`+${columns.length - 2} more`);
+      return `via ${edge.via_table}: ${attributes.join(", ")}`;
+    }
+
+    function renderFileDependencies(dependencies) {
+      $("#file-dependency-results").innerHTML = dependencies.length ? `
+        <h3 style="font:700 14px 'Segoe UI',Tahoma,sans-serif">Shared-table dependencies</h3>
+        <div class="table-wrap"><table><thead><tr><th>Writer file</th><th>Shared table</th><th>Connecting attributes</th><th>Reader file</th></tr></thead>
+          <tbody>${dependencies.map((edge) => {
+            const attributes = (edge.via_columns || []).map((column) => `${column.writer_column} -> ${column.reader_column}`);
+            return `<tr><td>${escapeHtml(edge.source_file)}</td><td>${escapeHtml(edge.via_table)}</td><td>${escapeHtml(attributes.join(", ") || "No matching column names")}</td><td>${escapeHtml(edge.target_file)}</td></tr>`;
+          }).join("")}</tbody>
+        </table></div>` : '<p class="help">No analyzed file writes a table that another analyzed file reads.</p>';
+    }
+
+    function showOfflineResults(result, options = {}) {
+      const summary = result.summary;
+      const dependencies = result.file_dependencies || [];
+      $("#results-panel").hidden = false;
+      $("#offline-graph").hidden = false;
+      $("#lineage-view-controls").hidden = false;
+      $("#results-title").textContent = options.title || "Offline SQL lineage";
+      $("#results-subtitle").textContent = options.subtitle || result.dialect.toUpperCase();
+      $("#result-metrics").innerHTML = `<div class="metric"><strong>${summary.table_count}</strong><span>tables</span></div><div class="metric"><strong>${summary.relationship_count}</strong><span>table relationships</span></div><div class="metric"><strong>${summary.mapped_columns}</strong><span>column mappings</span></div><div class="metric"><strong>${options.hideDependencies ? result.files.length : (summary.file_dependency_count || 0)}</strong><span>${options.hideDependencies ? "loading statements analyzed" : "SQL file dependencies"}</span></div>`;
+      $("#relationship-note").textContent = "Offline SQL mappings are derived from parsed statements. Review each expression and warning before treating it as verified lineage.";
+      const tableById = new Map(result.tables.map((id) => [id, {
+        id, name: id, schema: id.split(".").slice(0, -1).join("."), columns: [],
+      }]));
+      result.mappings.forEach((mapping) => {
+        const source = tableById.get(mapping.source_table);
+        if (source && mapping.source_column !== "-" && !source.columns.some((column) => column.name === mapping.source_column)) {
+          source.columns.push({ name: mapping.source_column, type: "source" });
+        }
+        const target = tableById.get(mapping.target_table);
+        if (target && !target.columns.some((column) => column.name === mapping.target_column)) {
+          target.columns.push({ name: mapping.target_column, type: "target" });
+        }
+      });
+      const tables = [...tableById.values()];
+      renderGraph($("#offline-graph"), tables, result.relationships);
+      const dependencyFiles = [...new Set(dependencies.flatMap((edge) => [edge.source_file, edge.target_file]))];
+      const fileNodes = dependencyFiles.map((id) => ({ id, columns: [] }));
+      const fileEdges = dependencies.map((edge) => ({
+        source: edge.source_file,
+        target: edge.target_file,
+        label: dependencyGraphLabel(edge),
+      }));
+      renderGraph($("#file-graph"), fileNodes, fileEdges, "No shared-table dependencies between these files.");
+      renderMappings(result, options.hideDependencies ? "Query ID" : "File");
+      renderFileDependencies(dependencies);
+      setOfflineLineageView("tables");
+      if (options.note) $("#relationship-note").textContent = options.note;
+      if (options.hideDependencies) $("#lineage-view-controls").hidden = true;
+      const statuses = result.files.map((file) => `${file.name}: ${file.status}${file.message ? ` - ${file.message}` : ""}`).join("\n");
+      $("#analysis-details").hidden = !options.hideDependencies;
+      $("#analysis-details-text").textContent = [...(result.warnings || []), statuses].filter(Boolean).join("\n");
+      if (!options.hideDependencies) setStatus($("#offline-status"), statuses, "success");
+    }
+
+    async function analyzeHistoryLineage() {
+      if (!activeConnection || activeConnection.engine !== "snowflake" || !liveCatalog || historyLoading) return;
+      const tables = [...document.querySelectorAll("#table-list input:checked")].map((input) => input.value);
+      if (!tables.length) return;
+      if (!$("#history-hours").reportValidity()) return;
+      const revision = catalogRevision;
+      historyLoading = true;
+      updateLiveButtons();
+      setStatus($("#live-status"), "Reading recent successful SQL from Snowflake query history...");
+      try {
+        const result = await api("/api/live/snowflake-history-lineage", {
+          ...activeConnection,
+          databases: [...$("#database-select").selectedOptions].map((option) => option.value),
+          tables, hours: Number($("#history-hours").value),
+        });
+        const currentTables = [...document.querySelectorAll("#table-list input:checked")].map((input) => input.value);
+        if (revision !== catalogRevision || tables.join("\n") !== currentTables.join("\n")) return;
+        showOfflineResults(result, {
+          title: "Snowflake query-history lineage", subtitle: `${result.hours} hours | ${result.history_rows} visible successful queries | ${result.files.length} loading statements analyzed`,
+          note: "Edges are derived from executed SQL, not foreign keys. Only supported statements visible in this history window are analyzed; absence of an edge is not proof of no lineage. SQL parsing does not verify row movement.",
+          hideDependencies: true,
+        });
+        setStatus($("#live-status"), result.relationships.length
+          ? `Found ${result.relationships.length} SQL-derived relationship(s). Review query analysis status and limitations.`
+          : "No supported loading relationships found between the selected tables in visible history. Review query analysis status and limitations.", "success");
+      } catch (error) {
+        if (revision === catalogRevision) setStatus($("#live-status"), error.message, "error");
+      } finally {
+        historyLoading = false;
+        updateLiveButtons();
+      }
+    }
+
+    async function analyzeOffline() {
+      const files = [...$("#offline-files").files];
+      if (!files.length) { setStatus($("#offline-status"), "Choose at least one .sql or .txt file.", "error"); return; }
+      const button = $("#analyze-offline");
+      button.disabled = true;
+      setStatus($("#offline-status"), `Reading ${files.length} local file(s)...`);
+      try {
+        const payload = await Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })));
+        setStatus($("#offline-status"), "Parsing statements and building mappings...");
+        const result = await api("/api/offline/analyze", { dialect: $("#offline-dialect").value, files: payload });
+        showOfflineResults(result);
+      } catch (error) {
+        setStatus($("#offline-status"), error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function mergeCatalogs(catalogs) {
+      return {
+        database: catalogs.map((catalog) => catalog.database).join(", "),
+        schemas: catalogs.flatMap((catalog) => catalog.schemas.map((schema) => `${catalog.database}.${schema}`)),
+        tables: catalogs.flatMap((catalog) => catalog.tables.map((table) => ({
+          ...table, database: catalog.database, id: `${catalog.database}.${table.id}`, schema: `${catalog.database}.${table.schema}`,
+        }))),
+        relationships: catalogs.flatMap((catalog) => catalog.relationships.map((edge) => ({
+          ...edge, source: `${edge.source_database || catalog.database}.${edge.source}`, target: `${edge.target_database || catalog.database}.${edge.target}`,
+        }))),
+        relationship_kind: [...new Set(catalogs.map((catalog) => catalog.relationship_kind).filter(Boolean))].join(" "),
+      };
+    }
+
+    async function fetchCatalog() {
+      if (!activeConnection) return;
+      const revision = ++catalogRevision;
+      const connection = activeConnection;
+      const databases = [...$("#database-select").selectedOptions].map((option) => option.value);
+      const previousSchemas = new Set([...$("#schema-select").selectedOptions].map((option) => option.value));
+      liveCatalog = null;
+      selectedTableIds.clear();
+      $("#generate-live").disabled = true;
+      $("#table-list").replaceChildren();
+      $("#schema-select").innerHTML = '<option value="" selected>All schemas</option>';
+      $("#connection-label").textContent = "";
+      $("#results-panel").hidden = true;
+      $("#live-graph").innerHTML = '<div class="empty-state">Select tables, then generate a relationship map.</div>';
+      populateSnowflakeCandidateTables();
+      updateLiveButtons();
+      if (!databases.length) {
+        $("#refresh-catalog").disabled = false;
+        setStatus($("#live-status"), "Choose at least one database.");
+        return;
+      }
+      setStatus($("#live-status"), "Reading schemas, tables, columns, and foreign keys...");
+      $("#refresh-catalog").disabled = true;
+      try {
+        const catalogs = [];
+        for (const database of databases) {
+          catalogs.push(await api("/api/catalog", { ...connection, database }));
+          if (revision !== catalogRevision) return;
+        }
+        liveCatalog = mergeCatalogs(catalogs);
+        selectedTableIds = new Set(liveCatalog.tables.map((table) => table.id));
+        $("#connection-label").innerHTML = `<strong>${escapeHtml(liveCatalog.database)}</strong> | ${liveCatalog.tables.length} tables | ${liveCatalog.schemas.length} schemas${liveCatalog.warehouse ? ` | Warehouse: ${escapeHtml(liveCatalog.warehouse)}` : ""}${liveCatalog.role ? ` | Role: ${escapeHtml(liveCatalog.role)}` : ""}`;
+        $("#schema-select").innerHTML = '<option value="">All schemas</option>' + liveCatalog.schemas.map((schema) => `<option value="${escapeHtml(schema)}">${escapeHtml(schema)}</option>`).join("");
+        [...$("#schema-select").options].forEach((option) => { option.selected = previousSchemas.has(option.value); });
+        if (!$("#schema-select").selectedOptions.length) $("#schema-select").options[0].selected = true;
+        renderTableChoices();
+        populateSnowflakeCandidateTables();
+        setStatus($("#live-status"), activeConnection.engine === "snowflake"
+          ? "Catalog loaded. Select tables to visualize declared Snowflake key metadata; these keys may not be enforced."
+          : "Catalog loaded. Select tables to visualize their foreign-key structure.", "success");
+      } catch (error) {
+        if (revision === catalogRevision) setStatus($("#live-status"), error.message, "error");
+      } finally {
+        if (revision === catalogRevision) $("#refresh-catalog").disabled = false;
+      }
+    }
+
+    async function connectLive(event) {
+      event.preventDefault();
+      const button = $("#connect-button");
+      button.disabled = true;
+      setStatus($("#live-status"), "Checking connection...");
+      try {
+        activeConnection = connectionPayload();
+        const result = await api("/api/connect", activeConnection);
+        const choices = result.databases.length ? result.databases : [result.connected_database];
+        $("#database-select").innerHTML = choices.map((database) => `<option value="${escapeHtml(database)}">${escapeHtml(database)}</option>`).join("");
+        $("#database-select").value = choices.includes(result.connected_database) ? result.connected_database : choices[0];
+        $("#catalog-panel").hidden = false;
+        $("#disconnect-button").disabled = false;
+        document.querySelectorAll("#connection-form input, #connection-form select").forEach((field) => { field.disabled = true; });
+        document.querySelectorAll("input[name='engine']").forEach((radio) => { radio.disabled = true; });
+        setStatus($("#live-status"), `Connected to ${result.connected_database}. Loading catalog...`, "success");
+        await fetchCatalog();
+      } catch (error) {
+        activeConnection = null;
+        setStatus($("#live-status"), error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function generateLiveLineage() {
+      if (!liveCatalog) return;
+      const selectedIds = new Set([...document.querySelectorAll("#table-list input:checked")].map((input) => input.value));
+      const tables = liveCatalog.tables.filter((table) => selectedIds.has(table.id));
+      const relationships = liveCatalog.relationships.filter((edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target));
+      renderGraph($("#live-graph"), tables, relationships);
+      $("#results-panel").hidden = false;
+      $("#lineage-view-controls").hidden = true;
+      $("#offline-graph").hidden = true;
+      $("#file-graph").hidden = true;
+      $("#file-dependency-results").hidden = true;
+      $("#mapping-results").hidden = false;
+      $("#results-title").textContent = "Live catalog relationships";
+      $("#analysis-details").hidden = true;
+      $("#results-subtitle").textContent = `${liveCatalog.database} | ${tables.length} selected tables`;
+      const relationshipLabel = activeConnection.engine === "snowflake" ? "declared key relationships" : "foreign-key relationships";
+      $("#result-metrics").innerHTML = `<div class="metric"><strong>${tables.length}</strong><span>selected tables</span></div><div class="metric"><strong>${relationships.length}</strong><span>${relationshipLabel}</span></div><div class="metric"><strong>${tables.reduce((sum, table) => sum + table.columns.length, 0)}</strong><span>columns inspected</span></div>`;
+      $("#relationship-note").textContent = liveCatalog.relationship_kind || "These links come from declared foreign keys. They describe relational structure, not transformation lineage or data movement.";
+      $("#mapping-results").innerHTML = relationships.length
+        ? `<div class="table-wrap"><table><thead><tr><th>Referenced table</th><th>Referenced key</th><th>Referencing table</th><th>Foreign key</th></tr></thead><tbody>${relationships.map((edge) => `<tr><td>${escapeHtml(edge.source)}</td><td>${escapeHtml(edge.source_column || "-")}</td><td>${escapeHtml(edge.target)}</td><td>${escapeHtml(edge.constraint || "-")}</td></tr>`).join("")}</tbody></table></div>`
+        : '<p class="help">No declared foreign keys connect the selected tables. Tables and columns are still listed; transformation lineage requires source SQL or ETL definitions.</p>';
+    }
+
+    function disconnect() {
+      ++catalogRevision;
+      selectedTableIds.clear();
+      activeConnection = null;
+      liveCatalog = null;
+      document.querySelectorAll("#connection-form input, #connection-form select").forEach((field) => { field.disabled = false; });
+      document.querySelectorAll("input[name='engine']").forEach((radio) => { radio.disabled = false; });
+      $("#connection-form").reset();
+      updateEngineFields();
+      $("#catalog-panel").hidden = true;
+      $("#snowflake-candidate-panel").hidden = true;
+      $("#snowflake-history-controls").hidden = true;
+      $("#database-select").replaceChildren();
+      $("#schema-select").innerHTML = '<option value="" selected>All schemas</option>';
+      $("#table-list").innerHTML = '<div class="empty-state">Connect to load tables.</div>';
+      $("#db-password").value = "";
+      $("#disconnect-button").disabled = true;
+      $("#results-panel").hidden = true;
+      $("#live-graph").innerHTML = '<div class="empty-state">Select tables, then generate a relationship map.</div>';
+      setStatus($("#live-status"), "Disconnected. Credentials cleared from this page.");
+    }
+
+    $("#mode-offline").addEventListener("change", updateMode);
+    $("#mode-live").addEventListener("change", updateMode);
+    document.querySelectorAll("input[name='engine']").forEach((radio) => radio.addEventListener("change", updateEngineFields));
+    $("#connection-form").addEventListener("submit", connectLive);
+    $("#disconnect-button").addEventListener("click", disconnect);
+    $("#refresh-catalog").addEventListener("click", fetchCatalog);
+    $("#database-select").addEventListener("change", fetchCatalog);
+    $("#schema-select").addEventListener("change", renderTableChoices);
+    $("#table-search").addEventListener("input", renderTableChoices);
+    $("#table-list").addEventListener("change", (event) => {
+      if (event.target.matches("input[type=checkbox]")) {
+        if (event.target.checked) selectedTableIds.add(event.target.value);
+        else selectedTableIds.delete(event.target.value);
+        updateLiveButtons();
+      }
+    });
+    $("#select-visible").addEventListener("click", () => {
+      document.querySelectorAll("#table-list input[type=checkbox]").forEach((input) => { input.checked = true; selectedTableIds.add(input.value); });
+      updateLiveButtons();
+    });
+    $("#clear-selection").addEventListener("click", () => {
+      selectedTableIds.clear();
+      document.querySelectorAll("#table-list input[type=checkbox]").forEach((input) => { input.checked = false; });
+      updateLiveButtons();
+    });
+    $("#generate-live").addEventListener("click", generateLiveLineage);
+    $("#generate-history-lineage").addEventListener("click", analyzeHistoryLineage);
+    $("#candidate-source-table").addEventListener("change", updateSnowflakeCandidateButton);
+    $("#candidate-target-table").addEventListener("change", updateSnowflakeCandidateButton);
+    $("#generate-candidate-mapping").addEventListener("click", renderSnowflakeCandidateMappings);
+    $("#table-lineage-view").addEventListener("click", () => setOfflineLineageView("tables"));
+    $("#file-dependency-view").addEventListener("click", () => setOfflineLineageView("files"));
+    $("#analyze-offline").addEventListener("click", analyzeOffline);
+    $("#offline-files").addEventListener("change", () => {
+      offlineFileList = [...$("#offline-files").files];
+      $("#offline-file-names").textContent = offlineFileList.map((file) => file.name).join("\n");
+    });
+    updateEngineFields();
+  </script>
+</body>
+</html>
